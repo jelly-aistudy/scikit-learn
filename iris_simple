@@ -1,0 +1,46 @@
+import sklearn
+import pandas as pd
+print(sklearn.__version__)
+
+from sklearn.datasets import load_iris
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
+
+iris = load_iris()
+keys = iris.keys()
+print('iris dataset keys: ', keys)
+# ['data', 'target', 'frame', 'target_names', 'DESCR', 'feature_names', 'filename']
+
+iris_data = iris.data
+iris_label = iris.target
+print('iris data type: ', type(iris_data)) # <class 'numpy.ndarray'>
+print('iris data shape: ', iris_data.shape) # (150, 4)
+print('iris target value: ', iris_label)
+print('iris target shape: ', iris_label.shape) # (150,)
+print('iris target name: ', iris.target_names) # ['setosa' 'versicolor' 'virginica']
+print('iris target name type: ', type(iris.target_names)) # <class 'numpy.ndarray'>
+print('iris target name length: ', len(iris.target_names)) # 3
+print('iris feature name type: ', type(iris.feature_names)) # <class 'list'>
+print('iris feature name length: ', len(iris.feature_names)) # 4
+
+iris_df = pd.DataFrame(data=iris_data, columns=iris.feature_names)
+iris_df['label'] = iris_label
+iris_df.head(3)
+
+x_train, x_test, y_train, y_test = train_test_split(iris_data, iris_label, test_size=0.2, random_state=1)
+
+# split data using pandas
+# feature_df = iris_df.iloc[:, :-1]
+# label_df = iris_df.iloc[:, -1]
+# x_train, x_test, y_train, y_test = train_test_split(feature_df, label_df, test_size=0.2, random_state=1)
+# print(type(x_train), type(x_test), type(y_train), type(y_test))
+# <class 'pandas.core.frame.DataFrame'> <class 'pandas.core.frame.DataFrame'> <class 'pandas.core.series.Series'> <class 'pandas.core.series.Series'>
+
+dt_clf = DecisionTreeClassifier(random_state=1)
+dt_clf.fit(x_train, y_train)
+prediction = dt_clf.predict(x_test)
+print(prediction)
+
+from sklearn.metrics import accuracy_score
+print('accuracy score: {0:.4f}'.format(accuracy_score(y_test, prediction)))
+# accuracy score: 0.9667
