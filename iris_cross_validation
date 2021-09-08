@@ -1,0 +1,138 @@
+## Cross Validation ##
+## KFold, StratifiedKFold, cross_val_score, GridSearchCV ##
+
+from sklearn.datasets import load_iris
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import KFold
+import numpy as np
+
+iris = load_iris()
+features = iris.data
+label = iris.target
+dt_clf = DecisionTreeClassifier(random_state=121)
+
+#### KFOLD ####
+
+kfold = KFold(n_splits=5) # KFold object
+fold_accuracy = [] # accuracy per each fold
+print('iris data shape: ', features.shape)
+
+n_iter = 0
+
+for train_index, test_index in kfold.split(features): # kfold.split: train, test row index (per fold) returned as array
+    x_train, x_test = features[train_index], features[test_index]
+    y_train, y_test = label[train_index], label[test_index]
+    
+    dt_clf.fit(x_train, y_train)
+    pred = dt_clf.predict(x_test)
+    n_iter += 1
+    
+    acc = np.round(accuracy_score(y_test, pred), 4)
+    train_size = x_train.shape[0]
+    test_size = x_test.shape[0]
+    print("#n#{0} kfold cross validation accuracy: {1}, train size: {2}, test size: {3}".format(n_iter, acc, train_size, test_size))
+    print("#{0} test index: {1}".format(n_iter, test_index))
+    print()
+    
+    fold_accuracy.append(acc)
+
+print("## average validation accuracy: ", np.mean(fold_accuracy))  
+
+
+#### Stratified KFOLD ####
+
+import pandas as pd
+
+iris = load_iris()
+iris_df = pd.DataFrame(data=iris.data, columns=iris.feature_names)
+iris_df['label']=iris.target
+iris_df['label'].value_counts()
+
+from sklearn.model_selection import StratifiedKFold
+
+skfold = StratifiedKFold(n_splits=5)
+n_iter = 0
+
+for train_index, test_index in skfold.split(iris_df, iris_df['label']): # for stratified KFold, we need label data
+    n_iter += 1
+    label_train = iris_df['label'].iloc[train_index]
+    label_test = iris_df['label'].iloc[test_index]
+    print("\n## cross validation {0}".format(n_iter))
+    print("## train label data distribution\n", label_train.value_counts())
+    print("## test label data distribution\n", label_test.value_counts())
+
+dt_clf = DecisionTreeClassifier(random_state=121)
+
+skfold = StratifiedKFold(n_splits=5)
+n_iter = 0
+skfold_accuracy = []
+
+for train_index, test_index in skfold.split(features, label): # label dataset necessary
+    x_train, x_test = features[train_index], features[test_index]
+    y_train, y_test = label[train_index], label[test_index]
+    
+    dt_clf.fit(x_train, y_train)
+    pred = dt_clf.predict(x_test)
+    
+    n_iter += 1
+    acc = np.round(accuracy_score(y_test, pred), 4)
+    train_size = x_train.shape[0]
+    test_size = x_test.shape[0]
+    
+    print("##{0} stratified cross validation accuracy: {1}, train data size: {2}, test data size: {3}".format(n_iter, acc, train_size, test_size))
+    print("##{0} test index: {1}".format(n_iter, test_index))
+    print()
+    
+    skfold_accuracy.append(acc)
+
+print("## all stratified cross validation accuracy: ", np.round(skfold_accuracy, 4))
+print("## average cross validation accuracy: ", np.mean(skfold_accuracy))
+
+#### cross_val_score() ####
+# https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.cross_val_score.html
+
+from sklearn.model_selection import cross_val_score, cross_validate
+import numpy as np
+
+iris = load_iris()
+dt_clf = DecisionTreeClassifier(random_state=123)
+
+iris_data = iris.data
+iris_label = iris.target
+scores = cross_val_score(dt_clf, iris_data, iris_label, scoring='accuracy', cv=3) # cv = cross validation set
+print("cross validation accuracy: ", np.round(scores, 4))
+print("average validation accuracy: ", np.round(np.mean(scores), 4))
+
+
+#### GridSearchCV ####
+# https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html
+from sklearn.model_selection import GridSearchCV, train_test_split
+
+iris = load_iris()
+x_train, x_test, y_train, y_test = train_test_split(iris.data, iris.target, test_size=0.2, random_state=125)
+dt_clf = DecisionTreeClassifier()
+parameters = {'max_depth': [1, 2, 3], 'min_samples_split': [2, 3]}
+
+# use param_grid as hyper parameters
+# refit=True default, if it's True, it will retrain model with the best parameter settings
+grid_dt_clf = GridSearchCV(dt_clf, param_grid=parameters, cv=3, refit=True, return_train_score=True)
+
+grid_dt_clf.fit(x_train, y_train)
+
+# result of GridSearchCV is saved with the name of cv_results_ (dictionary)
+scores_df = pd.DataFrame(grid_dt_clf.cv_results_)
+scores_df[['params', 'mean_test_score', 'rank_test_score', 'split0_test_score', 'split1_test_score', 'split2_test_score']]
+
+grid_dt_clf.cv_results_
+
+print("GridSearchCV best parameter: ", grid_dt_clf.best_params_)
+print("GridSearchCV best accuracy: {0:.4f}".format(grid_dt_clf.best_score_))
+
+# refit = True, so GridSearchCV object contain estimator after fit -> it can predict as well
+pred = grid_dt_clf.predict(x_test)
+print("test data accuracy: {0:.4f}".format(accuracy_score(y_test, pred)))
+
+estimator = grid_dt_clf.best_estimator_ # refit = True, so it is already trained with best parameters
+pred = estimator.predict(x_test)
+print("test data accuracy: {0:.4f}".format(accuracy_score(y_test, pred)))
