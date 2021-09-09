@@ -1,0 +1,166 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+%matplotlib inline
+
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV
+
+#### CHECK DATA ####
+titanic_df = pd.read_csv('titanic_train.csv')
+titanic_df.head(3)
+
+print(titanic_df.info())
+
+titanic_df['Age'].fillna(titanic_df['Age'].mean(), inplace=True)
+titanic_df['Cabin'].fillna('N', inplace=True)
+titanic_df['Embarked'].fillna('N', inplace=True)
+
+print('data set null value: \n', titanic_df.isnull().sum())
+print('\nsex value distribution: \n', titanic_df['Sex'].value_counts())
+print('\ncabin value distribution: \n', titanic_df['Cabin'].value_counts())
+print('\nembarked value distribution: \n', titanic_df['Embarked'].value_counts())
+
+titanic_df['Cabin'] = titanic_df['Cabin'].str[:1]
+print('\ncabin value distribution: ', titanic_df['Cabin'].value_counts())
+
+print(titanic_df.groupby(['Sex', 'Survived'])['Survived'].count())
+sns.barplot(x='Sex', y='Survived', data=titanic_df)
+sns.barplot(x='Pclass', y='Survived', hue='Sex', data=titanic_df)
+
+def get_category(age):
+    cat = ''
+    if age < 0: cat = 'Unknown'
+    elif age <= 5: cat = 'Baby'
+    elif age <= 12: cat = 'Child'
+    elif age <= 18: cat = 'Teenager'
+    elif age <= 40: cat = 'Youth'
+    elif age <= 60: cat = 'Middle Age'
+    else: cat = 'Elderly'
+    
+    return cat
+
+plt.figure(figsize=(10,6)) # figure resize
+group_names = ['Unknown', 'Baby', 'Child', 'Teenager', 'Youth', 'Middle Age', 'Elderly']
+
+titanic_df['Age_cat'] = titanic_df['Age'].apply(lambda x: get_category(x))
+sns.barplot(x='Age_cat', y='Survived', hue='Sex', data=titanic_df, order=group_names)
+titanic_df.drop('Age_cat', axis=1, inplace=True) # when drop column, please use axis = 1
+
+def encode_features(df):
+    features = ['Cabin', 'Sex', 'Embarked']
+    for feature in features:
+        le = preprocessing.LabelEncoder()
+        le = le.fit(df[feature])
+        df[feature] = le.transform(df[feature])
+    return df
+
+titanic_df = encode_features(titanic_df)
+titanic_df.head()
+
+
+#### PREPROCESS DATA ####
+
+def fillna(df):
+    df['Age'].fillna(df['Age'].mean(), inplace=True)
+    df['Cabin'].fillna('N',inplace=True)
+    df['Embarked'].fillna('N',inplace=True)
+    df['Fare'].fillna(0,inplace=True)
+    return df
+
+def drop_features(df):
+    df.drop(['PassengerId', 'Name', 'Ticket'], axis=1, inplace=True)
+    return df
+
+def label_encoding(df):
+    df['Cabin'] = df['Cabin'].str[:1]
+    features = ['Cabin', 'Sex', 'Embarked']
+    for feature in features:
+        le = preprocessing.LabelEncoder()
+        le = le.fit(df[feature])
+        df[feature] = le.transform(df[feature])
+    return df
+
+def convert_features(df):
+    df = fillna(df)
+    df = drop_features(df)
+    df = label_encoding(df)
+    return df
+    
+titanic_df = pd.read_csv('titanic_train.csv')
+y_titanic_df = titanic_df['Survived']
+x_titanic_df = titanic_df.drop('Survived', axis=1)
+x_titanic_df = convert_features(x_titanic_df)
+
+x_train, x_test, y_train, y_test = train_test_split(x_titanic_df, y_titanic_df, test_size=0.2, random_state=121)
+
+#### MODEL ####
+
+dt_clf = DecisionTreeClassifier(random_state=121)
+rf_clf = RandomForestClassifier(random_state=121)
+lr_clf = LogisticRegression()
+
+dt_clf.fit(x_train, y_train)
+dt_pred = dt_clf.predict(x_test)
+print('DecisionTreeClassifier accuracy: {0:.4f}'.format(accuracy_score(y_test, dt_pred)))
+
+rf_clf.fit(x_train, y_train)
+rf_pred = rf_clf.predict(x_test)
+print('RandomForestClassifier accuracy: {0:.4f}'.format(accuracy_score(y_test, rf_pred)))
+
+lr_clf.fit(x_train, y_train)
+lr_pred = lr_clf.predict(x_test)
+print('LogisticRegression accuracy: {0:.4f}'.format(accuracy_score(y_test, lr_pred)))
+
+
+#### CROSS VALIDATION ####
+
+## kfold
+def exec_kfold(clf, folds=5):
+    kfold = KFold(n_splits=folds)
+    scores = []
+    
+    for iter_count, (train_index, test_index) in enumerate(kfold.split(x_titanic_df)):
+        x_train, x_test = x_titanic_df.values[train_index], x_titanic_df.values[test_index]
+        y_train, y_test = y_titanic_df.values[train_index], y_titanic_df.values[test_index]
+        
+        clf.fit(x_train, y_train)
+        pred = clf.predict(x_test)
+        acc = accuracy_score(y_test, pred)
+        scores.append(acc)
+        print('cross validation {0} accuracy {1:.4f}'.format(iter_count, acc))
+    
+    mean_score = np.mean(scores)
+    print('mean accuracy: {0:.4f}'.format(mean_score))
+    
+exec_kfold(dt_clf, folds=5)
+
+## cross_val_score
+scores = cross_val_score(dt_clf, x_titanic_df, y_titanic_df, cv=5)
+for iter_count, acc in enumerate(scores):
+    print('cross validation {0} accuracy {1:.4f}'.format(iter_count, acc))
+print('mean accuracy: {0:.4f}'.format(np.mean(scores)))
+
+## GridSearchCV
+parameters = {'max_depth': [2, 3, 5, 10], 
+             'min_samples_split': [2, 3, 5],
+             'min_samples_leaf': [1, 5, 8]}
+
+grid_dt_clf = GridSearchCV(dt_clf, param_grid=parameters, scoring='accuracy', cv=5)
+grid_dt_clf.fit(x_train, y_train)
+
+print('GridSearchCV best hyper parameters: ', grid_dt_clf.best_params_)
+print('GridSearchCV best accuracy: ', grid_dt_clf.best_score_)
+
+best_dt_clf = grid_dt_clf.best_estimator_
+pred = best_dt_clf.predict(x_test)
+acc = accuracy_score(y_test, pred)
+print('GridSearchCV test accuracy: ', acc)
