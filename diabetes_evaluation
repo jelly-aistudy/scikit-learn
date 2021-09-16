@@ -1,0 +1,99 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score
+from sklearn.metrics import roc_auc_score, precision_recall_curve, roc_curve
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import Binarizer
+
+## LOAD DATA ##
+diabetes_data = pd.read_csv('diabetes.csv')
+print(diabetes_data['Outcome'].value_counts()) # 0 500; 1 268
+print(diabetes_data.head(3))
+print(diabetes_data.info())
+print(diabetes_data.describe())
+
+def get_evaluation(y_test, pred=None, pred_proba=None):
+    confusion = confusion_matrix(y_test, pred)
+    accuracy = accuracy_score(y_test, pred)
+    precision = precision_score(y_test, pred)
+    recall = recall_score(y_test, pred)
+    f1 = f1_score(y_test, pred)
+    roc_auc = roc_auc_score(y_test, pred_proba)
+    print('confusion matrix')
+    print(confusion)
+    print('accuracy: {0:.4f}, precision: {1:.4f}, recall: {2:.4f}, \
+    f1: {3:.4f}, auc: {4:.4f}'.format(accuracy, precision, recall, f1, roc_auc))
+
+def precision_recall_curve_plot(y_test=None, pred_proba_pos=None):
+    precisions, recalls, thresholds = precision_recall_curve(y_test, pred_proba_pos)
+    
+    plt.figure(figsize=(8,6))
+    threshold_boundary = thresholds.shape[0]
+    plt.plot(thresholds, precisions[0: threshold_boundary], linestyle='--', label='precision')
+    plt.plot(thresholds, recalls[0: threshold_boundary], label='recall')
+    
+    start, end = plt.xlim()
+    plt.xticks(np.round(np.arange(start, end, 0.1),2))
+    
+    plt.xlabel('Threshold value')
+    plt.ylabel('Precision and Recall value')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+## DATA ##
+x_data = diabetes_data.iloc[:, :-1]
+y_data = diabetes_data.iloc[:, -1]
+## SPLIT DATA ##
+x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2, random_state=121)
+## FIT AND PREDICT ##
+lr_clf = LogisticRegression()
+lr_clf.fit(x_train, y_train)
+pred = lr_clf.predict(x_test)
+pred_proba = lr_clf.predict_proba(x_test)[:, 1] # for roc_auc_score. extract positive
+get_evaluation(y_test, pred, pred_proba)
+
+pred_proba_pos = lr_clf.predict_proba(x_test)[:, 1]
+precision_recall_curve_plot(y_test, pred_proba_pos)
+
+## FIND OUT ABNORMAL DATA ##
+plt.hist(diabetes_data['Glucose'], bins=10)
+
+zero_features = ['Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI']
+total_count = diabetes_data['Glucose'].count()
+for feature in zero_features:
+    zero_count = diabetes_data[diabetes_data[feature] == 0][feature].count()
+    print('{0} zero count is {1}, percentage is {2:.2f} %'.format(feature, zero_count, 100*zero_count/total_count))
+
+## PREPROCESS DATA ##
+diabetes_data[zero_features] = diabetes_data[zero_features].replace(0, diabetes_data[zero_features].mean())
+
+## RETRAIN ##
+x_data = diabetes_data.iloc[:, :-1]
+y_data = diabetes_data.iloc[:, -1]
+
+scaler = StandardScaler()
+x_scaled = scaler.fit_transform(x_data)
+x_train, x_test, y_train, y_test = train_test_split(x_scaled, y_data, test_size = 0.2, random_state = 131, stratify = y_data)
+
+lr_clf = LogisticRegression()
+lr_clf.fit(x_train, y_train)
+pred = lr_clf.predict(x_test)
+pred_proba = lr_clf.predict_proba(x_test)[:, 1]
+get_evaluation(y_test, pred, pred_proba)
+
+def get_threshold_eval(y_test, pred_proba_pos, thresholds):
+    for custom_thr in thresholds:
+        binarizer = Binarizer(threshold=custom_thr).fit(pred_proba_pos)
+        custom_pred = binarizer.transform(pred_proba_pos)
+        print('threshold: ', custom_thr)
+        get_evaluation(y_test, custom_pred, pred_proba_pos)
+        
+thresholds = [0.3,0.33,0.36,0.39,0.42,0.45,0.48,0.50]
+pred_proba = lr_clf.predict_proba(x_test)
+get_threshold_eval(y_test, pred_proba[:, 1].reshape(-1,1), thresholds)
